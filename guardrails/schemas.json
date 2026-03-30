@@ -1,0 +1,22 @@
+{
+  "analystOutputKeys": [
+    "parentBranch",
+    "parentCommitSha",
+    "nextBranch",
+    "hypothesis",
+    "playerSignals",
+    "implementationTasks",
+    "validationSteps",
+    "riskNotes",
+    "commitMessage",
+    "prTitle",
+    "prBody"
+  ],
+  "coderOutputKeys": [
+    "status",
+    "summary",
+    "filesChanged",
+    "validationResults",
+    "commitMessage"
+  ]
+}

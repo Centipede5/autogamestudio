@@ -1,0 +1,49 @@
+{
+  "name": "autogamestudio",
+  "version": "0.1.0",
+  "description": "CLI for running recursive game-improvement agents against AutoGameStudio-compatible repos.",
+  "type": "module",
+  "bin": {
+    "autogamestudio": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "prompts",
+    "guardrails",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "cli",
+    "agents",
+    "games",
+    "autogamestudio"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^0.10.1",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "commander": "^14.0.1",
+    "execa": "^9.6.0",
+    "figlet": "^1.8.2",
+    "ora": "^8.2.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "eslint": "^9.22.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}
+

@@ -1,0 +1,6 @@
+{
+  "callsignPattern": "^[a-z0-9]{1,10}$",
+  "maxPromptValueLength": 50000,
+  "stripControlChars": true
+}
+

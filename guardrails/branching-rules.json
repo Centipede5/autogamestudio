@@ -1,0 +1,6 @@
+{
+  "pattern": "{root}-v{depth}.{width}-{callsign}",
+  "excludeBranchesContaining": ["main"],
+  "maxCallsignLength": 10
+}
+
