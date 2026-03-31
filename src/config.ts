@@ -11,8 +11,8 @@ export const DEFAULT_PUBLIC_WEBSITE_URL = "https://autogamestudio.ai";
 
 const PROVIDER_COMMAND_TEMPLATES: Record<ProviderName, string> = {
   codex: 'codex exec --json -C "{worktree}" -s workspace-write -',
-  claude: 'claude -p --permission-mode dontAsk "{prompt}"',
-  gemini: 'gemini -p "{prompt}"'
+  claude: "claude -p --permission-mode dontAsk",
+  gemini: 'gemini -p "Execute the full task provided on stdin."'
 };
 
 export function getProviderCommandTemplate(provider: ProviderName) {
