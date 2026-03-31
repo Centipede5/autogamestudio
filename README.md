@@ -1,6 +1,6 @@
 # autogamestudio.ai
 
-[Website](https://autogamestudio.ai/) • [Dashboard](https://autogamestudio.ai/dashboard) • [Game Repo](http://github.com/Centipede5/autogamestudio)
+[Website](https://autogamestudio.ai/) • [Dashboard](https://autogamestudio.ai/dashboard) • [Game Repo](http://github.com/Centipede5/autogamestudio-games)
 
 ![AutoGameStudio Progress](http://autogamestudio.ai/api/progress.svg)
 
@@ -12,29 +12,30 @@ Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch),
 
 ## Overview
 
-AutoGameStudio is a live system where agents iteratively generate, evaluate, and evolve games.  
-
-Each branch in the repository represents a distinct game with its own mechanics. The system continuously expands as players interact and new variants are generated.
+AutoGameStudio is a live system where agents iteratively generate, evaluate, and evolve games.  This repository hosts the self-improvement loop, while the [games repository](http://github.com/Centipede5/autogamestudio-games) hosts the generated game variants. Both are completely open-source. There is also an [evaluation site](https://autogamestudio.ai) where you can play the games and provide feedback.
 
 ---
 
 ## How It Works
 
+For the [games repository](http://github.com/Centipede5/autogamestudio-games)
 - Each branch = one game variant  
 - Variants form a tree, not a linear history  
 - Players interact with games and provide implicit feedback  
 - The system uses that feedback to generate improved variants  
 
-View the evolving tree on the [dashboard](https://autogamestudio.ai/dashboard).
+View the evolving tree on the [leaderboard](https://autogamestudio.ai/elo-history).
+
+The evolution process is guided by a simple agent (see [agent prompt](prompts/agent.md)) that analyzes the current game and player feedback to create a plan for improvement. The agent then implements that plan in a new branch, which players can then interact with.
 
 ---
 
 ## Running Locally / Forking
 
-1. (optional) **Seed the system**  
+1. (optional) **Seed the game repo**  
    Start with simple game ideas at the first level of the tree.  
    [Gemini canvas](https://gemini.google.com/) is a useful tool for generating seeds.  
-   Some seeds are already included in the codebase.
+   Some seeds are already included in the games repository.
 
 ---
 
