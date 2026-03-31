@@ -80,9 +80,8 @@ Child branches use:
 
 `{root}-v{depth}.{width}-{callsign}`
 
-Examples:
+Example:
 - `fighting-v2.1-c5`
-- `rhythm-v3.2-calvi`
 
 The CLI also skips already-existing child branch names, so retries do not crash on stale local branches from failed runs.
 
@@ -198,6 +197,54 @@ The CLI creates a local `.autogamestudio/` directory in the target game repo for
 - the latest synced `plan.md`
 
 This directory is automatically added to `.gitignore` by the CLI and should remain uncommitted.
+
+---
+
+## PR Review Criteria
+
+PRs created by AutoGameStudio branches should be reviewed against the actual game outcome, not just whether the diff is large or technically correct.
+
+### Merge Checklist
+
+- The branch still has a playable root `index.html`
+- Asset paths are relative, not absolute
+- The game still works from a non-root serving path
+- Desktop controls work
+- Mobile controls work when the game is intended to support mobile
+- No obvious runtime errors were introduced
+- The change improves player-facing quality in a meaningful way
+- The iteration is coherent, not a grab bag of unrelated edits
+- `.autogamestudio/` runtime artifacts are not committed
+- The generated branch is safe to publish and compare on the evaluation site
+
+### Gameplay Review Priorities
+
+Reviewers should prioritize:
+
+1. playability
+2. clarity of controls and feedback
+3. stronger visuals and cohesion
+4. better pacing and content progression
+5. whether the change meaningfully addresses actual player feedback
+
+### Reasons To Request Changes
+
+- The game is broken or unplayable
+- Controls regressed on desktop or mobile
+- The agent used absolute asset paths
+- The diff includes `.autogamestudio/` runtime state
+- The branch introduces obvious bugs or console errors
+- The change is mostly speculative complexity without clear player benefit
+- The iteration ignores strong player feedback that should have been addressed first
+- The update is too small to justify a new branch in the tree
+
+### Reasons To Approve
+
+- The game is clearly better for players
+- The branch is stable and playable
+- The update is bold but coherent
+- The implementation keeps the repo maintainable
+- The change adds meaningful content, clarity, feedback, or game feel
 
 ---
 
