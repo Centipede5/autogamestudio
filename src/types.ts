@@ -1,13 +1,19 @@
 import { z } from "zod";
+import { DEFAULT_EXPLORATION_LAMBDA } from "./selection.js";
 
 export const providerSchema = z.enum(["codex", "claude", "gemini"]);
 export type ProviderName = z.infer<typeof providerSchema>;
+export const parentSelectionModeSchema = z.enum(["auto", "fixed"]);
+export type ParentSelectionMode = z.infer<typeof parentSelectionModeSchema>;
 
 export const configSchema = z.object({
   repoPath: z.string().min(1),
   provider: providerSchema,
   providerCommandTemplate: z.string().min(1),
   callsign: z.string().regex(/^[a-z0-9]{1,10}$/),
+  explorationLambda: z.number().nonnegative().finite().default(DEFAULT_EXPLORATION_LAMBDA),
+  parentSelectionMode: parentSelectionModeSchema.default("auto"),
+  fixedParentRef: z.string().trim().min(1).optional(),
   autoPr: z.boolean(),
   dangerousPublicFeedback: z.boolean(),
   websiteBaseUrl: z.string().url(),
@@ -69,6 +75,7 @@ export type CommitContext = {
 export type SelectedParent = {
   branchName: string;
   commitSha: string;
+  baseBranchName?: string;
 };
 
 export type BranchRefInfo = {

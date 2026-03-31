@@ -8,6 +8,7 @@ const baseConfig = {
   provider: "codex" as const,
   providerCommandTemplate: "codex exec --json -",
   callsign: "tester",
+  explorationLambda: 1.25,
   autoPr: false,
   dangerousPublicFeedback: false,
   websiteBaseUrl: "http://localhost:3000",

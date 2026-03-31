@@ -14,25 +14,26 @@ import { createPullRequest } from "../github.js";
 import {
   assertGitRepo,
   assertProviderCommandAvailable,
-  buildSelectedParent,
   cloneRepoIfNeeded,
   commitAllChanges,
   createIsolatedWorktree,
   getBranchRefs,
-  getLocalBranchNames,
   getOriginUrl,
   parseGitHubRepoFromRemote,
-  pushBranch
+  pushBranch,
+  resolveParentStartPoint,
+  resolveSelectedParentRef
 } from "../git/repo.js";
-import { createChildBranchName, isAutoSelectableBranch } from "../guardrails/branching.js";
+import { createChildBranchName } from "../guardrails/branching.js";
 import { renderTemplate, sanitizePromptValue } from "../guardrails/sanitize.js";
 import { buildCommitMessage, buildPrBody, buildPrTitle } from "../metadata.js";
-import { syncPlanFileToRepoRuntime } from "../plan-file.js";
+import { getRepoPlanPath, getWorktreePlanPath, syncPlanFileToRepoRuntime } from "../plan-file.js";
 import { getProviderAdapter } from "../providers/index.js";
+import { selectRankedCandidate } from "../selection.js";
 import { loadRepoState, saveRepoState } from "../state.js";
 import type { IterationRecord, RepoConfig } from "../types.js";
 import { createSpinner, info, success, warn } from "../ui/logger.js";
-import { promptForFailureAction, promptForManualBranch, promptForSetup } from "../ui/prompts.js";
+import { promptForFailureAction, promptForSetup } from "../ui/prompts.js";
 import { validateRepoOutput } from "../validation/repo.js";
 import { WebsiteClient } from "../website/client.js";
 
@@ -54,6 +55,9 @@ export async function runCommand(options: RunOptions) {
   const setup = await promptForSetup(initialRepoInput, {
     provider: options.provider ?? existingConfig?.provider,
     callsign: options.callsign ?? existingConfig?.callsign,
+    explorationLambda: existingConfig?.explorationLambda,
+    parentSelectionMode: existingConfig?.parentSelectionMode,
+    fixedParentRef: existingConfig?.fixedParentRef,
     autoPr: options.autoPr ?? existingConfig?.autoPr,
     dangerousPublicFeedback: options.dangerousPublicFeedback ?? existingConfig?.dangerousPublicFeedback,
     runMode: options.once ? "once" : "continuous"
@@ -71,6 +75,9 @@ export async function runCommand(options: RunOptions) {
     provider: setup.provider,
     providerCommandTemplate: getProviderCommandTemplate(setup.provider),
     callsign: setup.callsign,
+    explorationLambda: setup.explorationLambda,
+    parentSelectionMode: setup.parentSelectionMode,
+    fixedParentRef: setup.fixedParentRef,
     autoPr: setup.autoPr,
     dangerousPublicFeedback: setup.dangerousPublicFeedback,
     websiteBaseUrl: options.websiteBaseUrl ?? existingConfig?.websiteBaseUrl ?? DEFAULT_WEBSITE_URL,
@@ -89,8 +96,17 @@ export async function runCommand(options: RunOptions) {
     runtimeConfig.githubRepo = parseGitHubRepoFromRemote(remoteUrl) ?? undefined;
   }
 
+  const runOnce = options.once || setup.runMode === "once";
   await saveRepoConfig(runtimeConfig);
   spinner.succeed("Configuration saved.");
+  info(`Repository: ${repoPath}`);
+  info(`Provider: ${runtimeConfig.provider}`);
+  info(`Website: ${runtimeConfig.websiteBaseUrl}`);
+  info(`Exploration lambda: ${runtimeConfig.explorationLambda}`);
+  info(
+    `Parent mode: ${runtimeConfig.parentSelectionMode === "fixed" ? `fixed (${runtimeConfig.fixedParentRef})` : "auto-select"}`
+  );
+  info(`Run mode: ${runOnce ? "once" : "continuous"}`);
 
   info("running agent studio...");
   const websiteClient = new WebsiteClient({
@@ -98,7 +114,6 @@ export async function runCommand(options: RunOptions) {
     publicWebsiteBaseUrl: runtimeConfig.publicWebsiteBaseUrl,
     dangerousPublicFeedback: runtimeConfig.dangerousPublicFeedback
   });
-  const runOnce = options.once || setup.runMode === "once";
 
   let keepRunning = true;
   while (keepRunning) {
@@ -127,7 +142,7 @@ export async function runCommand(options: RunOptions) {
 
 async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClient) {
   const state = await loadRepoState(config.repoPath);
-  const selectedParent = await selectParent(config.repoPath, websiteClient);
+  const selectedParent = await selectParent(config, websiteClient);
   const branchRefs = await getBranchRefs(config.repoPath);
   const childBranchName = createChildBranchName({
     parentBranchName: selectedParent.branchName,
@@ -136,6 +151,8 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
     branchRefs
   });
   const worktreePath = path.join(config.repoPath, ".autogamestudio", "worktrees", childBranchName);
+  const worktreePlanPath = getWorktreePlanPath(worktreePath);
+  const repoPlanPath = getRepoPlanPath(config.repoPath);
 
   const iteration: IterationRecord = {
     startedAt: new Date().toISOString(),
@@ -155,12 +172,19 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
   await saveRepoState(config.repoPath, state);
 
   try {
+    info(`Selected parent branch: ${selectedParent.branchName} @ ${selectedParent.commitSha.slice(0, 7)}`);
+    info(`Next child branch: ${childBranchName}`);
+    info(`Worktree: ${worktreePath}`);
+    info(`Agent plan will be written to: ${worktreePlanPath}`);
+    info(`Latest synced plan will be visible at: ${repoPlanPath}`);
+
     const setupSpinner = createSpinner(`Creating worktree ${childBranchName}`);
     await createIsolatedWorktree({
       repoPath: config.repoPath,
       worktreePath,
       newBranchName: childBranchName,
-      parentBranchName: selectedParent.branchName
+      parentBranchName: selectedParent.branchName,
+      parentCommitSha: selectedParent.commitSha
     });
     setupSpinner.succeed(`Worktree created at ${worktreePath}`);
 
@@ -179,6 +203,8 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
     });
 
     const provider = getProviderAdapter(config.provider);
+    info(`Running ${config.provider} in ${worktreePath}`);
+    info("Waiting for the agent to create .autogamestudio/plan.md and implement the changes.");
     const agentSpinner = createSpinner(`Running agent with ${config.provider}`);
     const agentResult = await provider.run({
       cwd: worktreePath,
@@ -190,8 +216,10 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
       throw new Error(agentResult.stderr || "Agent provider run failed.");
     }
     agentSpinner.succeed("Agent completed.");
+    success(`Worktree plan generated at ${worktreePlanPath}`);
 
-    await syncPlanFileToRepoRuntime(config.repoPath, worktreePath);
+    const syncedPlanPath = await syncPlanFileToRepoRuntime(config.repoPath, worktreePath);
+    success(`Latest plan synced to ${syncedPlanPath}`);
 
     const validationSpinner = createSpinner("Validating repo output");
     const changedFiles = await validateRepoOutput({
@@ -200,11 +228,13 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
       config
     });
     validationSpinner.succeed(`Validated ${changedFiles.length} changed file(s).`);
+    info(`Changed files: ${changedFiles.join(", ")}`);
 
     const publishSpinner = createSpinner(`Committing and pushing ${childBranchName}`);
     await commitAllChanges(worktreePath, buildCommitMessage(selectedParent.branchName, childBranchName));
     await pushBranch(worktreePath, childBranchName);
     publishSpinner.succeed(`Pushed ${childBranchName}`);
+    success(`Branch pushed: ${childBranchName}`);
 
     const rescanned = await websiteClient.triggerRescan();
     if (rescanned) {
@@ -217,6 +247,9 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
       if (!config.githubRepo) {
         throw new Error("Auto-PR is enabled, but GitHub repo could not be determined.");
       }
+      if (!selectedParent.baseBranchName) {
+        warn("Auto-PR skipped because the fixed parent ref does not resolve to a named branch.");
+      } else {
       const prSpinner = createSpinner("Creating pull request");
       const pullRequest = await createPullRequest({
         repo: config.githubRepo,
@@ -228,9 +261,10 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
           startedAt: iteration.startedAt
         }),
         head: childBranchName,
-        base: selectedParent.branchName
+        base: selectedParent.baseBranchName
       });
       prSpinner.succeed(`Pull request created${pullRequest.html_url ? `: ${pullRequest.html_url}` : ""}`);
+      }
     }
 
     iteration.status = "success";
@@ -247,17 +281,36 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
   }
 }
 
-async function selectParent(repoPath: string, websiteClient: WebsiteClient) {
-  try {
-    return await websiteClient.getTopParentCandidate();
-  } catch {
-    const branches = (await getLocalBranchNames(repoPath)).filter(isAutoSelectableBranch);
-    if (branches.length === 0) {
-      throw new Error("No selectable local branches are available.");
+async function selectParent(config: RepoConfig, websiteClient: WebsiteClient) {
+  if (config.parentSelectionMode === "fixed") {
+    if (!config.fixedParentRef) {
+      throw new Error("Fixed parent mode requires a branch name or commit hash.");
     }
-    const branchName = await promptForManualBranch(branches);
-    return buildSelectedParent(repoPath, branchName);
+    const fixedParent = await resolveSelectedParentRef(config.repoPath, config.fixedParentRef);
+    info(`Using fixed parent ref ${config.fixedParentRef} -> ${fixedParent.branchName} @ ${fixedParent.commitSha.slice(0, 7)}`);
+    return fixedParent;
   }
+
+  const candidates = await websiteClient.getParentCandidates();
+  const resolvableCandidates = [];
+  for (const candidate of candidates) {
+    const resolvedStartPoint = await resolveParentStartPoint(config.repoPath, candidate.branchName, candidate.commitSha);
+    if (resolvedStartPoint) {
+      resolvableCandidates.push(candidate);
+    }
+  }
+  if (resolvableCandidates.length === 0) {
+    throw new Error("No eligible website parent branches matched this repo. Parents must have at least 3 matches and exist in the selected repo.");
+  }
+
+  const selectedCandidate = selectRankedCandidate(resolvableCandidates, config.explorationLambda);
+  info(
+    `Website candidate pool: ${resolvableCandidates.length} eligible branches, sampled with lambda ${config.explorationLambda} -> ${selectedCandidate.branchName}`
+  );
+  return {
+    ...selectedCandidate,
+    baseBranchName: selectedCandidate.branchName
+  };
 }
 
 async function loadGuardrailContext(repoPath: string) {

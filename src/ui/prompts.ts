@@ -1,8 +1,9 @@
 import os from "node:os";
 import { cancel, confirm, group, isCancel, select, text } from "@clack/prompts";
-import { type ProviderName } from "../types.js";
+import { type ParentSelectionMode, type ProviderName } from "../types.js";
 import { isLikelyGitHubUrl } from "../guardrails/paths.js";
 import { sanitizeCallsign } from "../guardrails/sanitize.js";
+import { DEFAULT_EXPLORATION_LAMBDA, EXPLORATION_PRESETS } from "../selection.js";
 
 function assertPromptResult<T>(value: T | symbol): T {
   if (isCancel(value)) {
@@ -22,6 +23,9 @@ export async function confirmDangerousExecution() {
 export async function promptForSetup(defaultRepo: string, defaults?: Partial<{
   provider: ProviderName;
   callsign: string;
+  explorationLambda: number;
+  parentSelectionMode: ParentSelectionMode;
+  fixedParentRef: string;
   autoPr: boolean;
   dangerousPublicFeedback: boolean;
   runMode: "once" | "continuous";
@@ -66,6 +70,33 @@ export async function promptForSetup(defaultRepo: string, defaults?: Partial<{
             }
           }
         }),
+      explorationLambda: () =>
+        select({
+          message: "Choose exploration level for parent selection",
+          initialValue: defaults?.explorationLambda ?? DEFAULT_EXPLORATION_LAMBDA,
+          options: EXPLORATION_PRESETS.map((preset) => ({
+            label: `${preset.label} (lambda ${preset.value})`,
+            value: preset.value,
+            hint: preset.description
+          }))
+        }),
+      parentSelectionMode: () =>
+        select({
+          message: "Choose parent selection mode",
+          initialValue: defaults?.parentSelectionMode ?? "auto",
+          options: [
+            {
+              label: "Auto-select parent",
+              value: "auto",
+              hint: "Sample from eligible evaluated branches using the exploration lambda."
+            },
+            {
+              label: "Use one fixed parent",
+              value: "fixed",
+              hint: "Always branch from one branch or commit hash, such as 40201b3."
+            }
+          ]
+        }),
       autoPr: () =>
         confirm({
           message: "Enable auto-PR?",
@@ -94,10 +125,30 @@ export async function promptForSetup(defaultRepo: string, defaults?: Partial<{
     }
   );
 
+  let fixedParentRef: string | undefined;
+  if ((answers.parentSelectionMode as ParentSelectionMode) === "fixed") {
+    fixedParentRef = assertPromptResult(
+      await text({
+        message: "Enter the fixed parent branch or commit hash",
+        initialValue: defaults?.fixedParentRef ?? "",
+        placeholder: "e.g. rhythm or 40201b3",
+        validate(value) {
+          if (!value.trim()) {
+            return "A branch name or commit hash is required for fixed-parent mode.";
+          }
+          return;
+        }
+      })
+    ).trim();
+  }
+
   return {
     repoInput: answers.repoInput.trim(),
     provider: answers.provider as ProviderName,
     callsign: sanitizeCallsign(answers.callsign),
+    explorationLambda: Number(answers.explorationLambda),
+    parentSelectionMode: answers.parentSelectionMode as ParentSelectionMode,
+    fixedParentRef,
     autoPr: Boolean(answers.autoPr),
     dangerousPublicFeedback: Boolean(answers.dangerousPublicFeedback),
     runMode: answers.runMode as "once" | "continuous",

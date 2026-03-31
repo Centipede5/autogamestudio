@@ -23,9 +23,9 @@ Constraints:
 
 Rules:
 - If this game is in a single file or the codebase is poorly structured, make cleanup and reorganization your first task.
+- Remember this is played by default in a small portrait window on most devices, so make sure UI and controls are optimized for that. Make sure that the UI scales to fit into the game and make sure instructions / controls are clear.
 - Fix any errors ASAP. If the game lacks good desktop or mobile controls, treat that as critical.
-- Do not make performance enhancements unless players specifically asked for them. Avoid adding code complexity for speculative optimization.
-- Try to make bolder changes. Aim for a meaningful "v2" step, not a tiny "v1.0.1" patch.
+- Do not make performance enhancements unless players specifically asked for them. Avoid adding code complexity for speculative optimizations.
 - When looking at player feedback, pay special attention to strong-feeling feedback such as "movement speed way too fast" or "game is way too easy".
 - Do not over-index on weak feedback unless it is very consistent across players.
 

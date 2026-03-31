@@ -3,8 +3,8 @@ import path from "node:path";
 import { configSchema, type ProviderName, type RepoConfig } from "./types.js";
 import { getPackageRoot } from "./internal/package-root.js";
 
-export const DEFAULT_LOCAL_REPO = "C:\\Users\\calvi\\Documents\\GitHub\\autogamestudio-games";
-export const DEFAULT_REMOTE_REPO = "https://github.com/centipede5/autogamestudio";
+export const DEFAULT_LOCAL_REPO = "https://github.com/Centipede5/autogamestudio-games";
+export const DEFAULT_REMOTE_REPO = "https://github.com/Centipede5/autogamestudio-games";
 export const DEFAULT_WEBSITE_URL = "http://localhost:3000";
 export const DEFAULT_PUBLIC_WEBSITE_URL = "https://autogamestudio.ai";
 
@@ -53,6 +53,7 @@ export async function ensureRepoRuntimeFiles(repoPath: string) {
   const runtimeDir = getRuntimeDir(repoPath);
   const packageRoot = getPackageRoot();
 
+  await ensureRuntimeDirIgnored(repoPath);
   await fs.mkdir(path.join(runtimeDir, "prompts"), { recursive: true });
   await fs.mkdir(path.join(runtimeDir, "guardrails"), { recursive: true });
   await fs.mkdir(path.join(runtimeDir, "worktrees"), { recursive: true });
@@ -64,6 +65,33 @@ export async function ensureRepoRuntimeFiles(repoPath: string) {
   for (const filename of ["forbidden-paths.json", "sanitization-rules.json", "branching-rules.json", "schemas.json"]) {
     await copyIfMissing(path.join(packageRoot, "guardrails", filename), path.join(runtimeDir, "guardrails", filename));
   }
+}
+
+async function ensureRuntimeDirIgnored(repoPath: string) {
+  const gitignorePath = path.join(repoPath, ".gitignore");
+  const desiredEntry = ".autogamestudio/";
+
+  let existing = "";
+  try {
+    existing = await fs.readFile(gitignorePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  const lines = existing
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+  const alreadyIgnored = lines.includes(desiredEntry) || lines.includes("/.autogamestudio/");
+  if (alreadyIgnored) {
+    return;
+  }
+
+  const nextContent = existing
+    ? `${existing.replace(/\s*$/, "")}\n${desiredEntry}\n`
+    : `${desiredEntry}\n`;
+  await fs.writeFile(gitignorePath, nextContent, "utf8");
 }
 
 async function copyIfMissing(sourcePath: string, destinationPath: string) {

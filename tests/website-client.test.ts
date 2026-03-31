@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WebsiteClient } from "../src/website/client.js";
+import { MIN_PARENT_MATCHES, WebsiteClient } from "../src/website/client.js";
 
 describe("website client", () => {
   afterEach(() => {
@@ -7,14 +7,15 @@ describe("website client", () => {
     vi.restoreAllMocks();
   });
 
-  it("selects the highest-elo non-main branch", async () => {
+  it("selects the highest-elo non-main branch with enough matches", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
         versions: [
           { branchName: "main", branchLabels: ["main"], commitSha: "111", currentElo: 9999, matches: 1 },
-          { branchName: "fighting", branchLabels: ["fighting"], commitSha: "222", currentElo: 1800, matches: 5 },
-          { branchName: "flappy", branchLabels: ["flappy"], commitSha: "333", currentElo: 1700, matches: 1 }
+          { branchName: "fighting", branchLabels: ["fighting"], commitSha: "222", currentElo: 1800, matches: MIN_PARENT_MATCHES - 1 },
+          { branchName: "flappy", branchLabels: ["flappy"], commitSha: "333", currentElo: 1700, matches: MIN_PARENT_MATCHES + 2 },
+          { branchName: "rpg", branchLabels: ["rpg"], commitSha: "444", currentElo: 1650, matches: MIN_PARENT_MATCHES + 6 }
         ]
       })
     }));
@@ -27,9 +28,30 @@ describe("website client", () => {
     });
 
     await expect(client.getTopParentCandidate()).resolves.toEqual({
-      branchName: "fighting",
-      commitSha: "222"
+      branchName: "flappy",
+      commitSha: "333"
     });
+  });
+
+  it("rejects website candidates when no branch meets the minimum match threshold", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        versions: [
+          { branchName: "fighting", branchLabels: ["fighting"], commitSha: "222", currentElo: 1800, matches: 1 },
+          { branchName: "flappy", branchLabels: ["flappy"], commitSha: "333", currentElo: 1700, matches: 2 }
+        ]
+      })
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new WebsiteClient({
+      websiteBaseUrl: "http://localhost:3000",
+      publicWebsiteBaseUrl: "https://autogamestudio.ai",
+      dangerousPublicFeedback: false
+    });
+
+    await expect(client.getParentCandidates()).rejects.toThrow(`at least ${MIN_PARENT_MATCHES} matches`);
   });
 
   it("falls back to the public site for commit context when enabled", async () => {

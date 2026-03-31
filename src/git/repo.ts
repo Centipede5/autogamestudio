@@ -93,7 +93,8 @@ function getProviderInstallMessage(executable: string) {
 }
 
 export async function getBranchHeadSha(repoPath: string, branchName: string) {
-  const result = await execa("git", ["-C", repoPath, "rev-parse", branchName], { reject: false });
+  const resolvedRef = await resolveParentStartPoint(repoPath, branchName);
+  const result = await execa("git", ["-C", repoPath, "rev-parse", resolvedRef ?? branchName], { reject: false });
   if (result.exitCode !== 0) {
     throw new Error(`Unable to resolve branch head for ${branchName}`);
   }
@@ -149,17 +150,36 @@ export async function getLocalBranchNames(repoPath: string) {
   return result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
+export async function getSelectableBranchNames(repoPath: string) {
+  const refs = await getBranchRefs(repoPath);
+  const deduped = new Set<string>();
+  for (const ref of refs) {
+    const normalized = normalizeBranchName(ref.name);
+    if (normalized) {
+      deduped.add(normalized);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 export async function createIsolatedWorktree(params: {
   repoPath: string;
   worktreePath: string;
   newBranchName: string;
   parentBranchName: string;
+  parentCommitSha?: string;
 }) {
   ensureWithinDirectory(path.join(params.repoPath, ".autogamestudio", "worktrees"), params.worktreePath);
   await fs.mkdir(path.dirname(params.worktreePath), { recursive: true });
+  const startPoint = await resolveParentStartPoint(params.repoPath, params.parentBranchName, params.parentCommitSha);
+  if (!startPoint) {
+    throw new Error(
+      `Unable to resolve parent branch ${params.parentBranchName}. Try fetching the repo or choose a local branch.`
+    );
+  }
   const result = await execa(
     "git",
-    ["-C", params.repoPath, "worktree", "add", "-b", params.newBranchName, params.worktreePath, params.parentBranchName],
+    ["-C", params.repoPath, "worktree", "add", "-b", params.newBranchName, params.worktreePath, startPoint],
     { reject: false }
   );
   if (result.exitCode !== 0) {
@@ -241,6 +261,76 @@ export function parseGitHubRepoFromRemote(remoteUrl: string | null) {
 export async function buildSelectedParent(repoPath: string, branchName: string): Promise<SelectedParent> {
   return {
     branchName,
-    commitSha: await getBranchHeadSha(repoPath, branchName)
+    commitSha: await getBranchHeadSha(repoPath, branchName),
+    baseBranchName: branchName
   };
+}
+
+export async function resolveParentStartPoint(repoPath: string, branchName: string, commitSha?: string) {
+  return resolveExistingRef(repoPath, [branchName, `origin/${branchName}`, commitSha]);
+}
+
+export async function resolveSelectedParentRef(repoPath: string, requestedRef: string): Promise<SelectedParent> {
+  const branchRefs = await getBranchRefs(repoPath);
+  const exactBranchRef = branchRefs.find((ref) => ref.name === requestedRef);
+  if (exactBranchRef) {
+    const normalizedName = normalizeBranchName(exactBranchRef.name);
+    return {
+      branchName: normalizedName,
+      commitSha: exactBranchRef.headCommitSha,
+      baseBranchName: normalizedName
+    };
+  }
+
+  const normalizedMatch = branchRefs.find((ref) => normalizeBranchName(ref.name) === requestedRef);
+  if (normalizedMatch) {
+    const normalizedName = normalizeBranchName(normalizedMatch.name);
+    return {
+      branchName: normalizedName,
+      commitSha: normalizedMatch.headCommitSha,
+      baseBranchName: normalizedName
+    };
+  }
+
+  const commitResult = await execa("git", ["-C", repoPath, "rev-parse", "--verify", `${requestedRef}^{commit}`], {
+    reject: false
+  });
+  if (commitResult.exitCode !== 0) {
+    throw new Error(`Unable to resolve fixed parent ref: ${requestedRef}`);
+  }
+
+  const commitSha = commitResult.stdout.trim();
+  const matchingHead = branchRefs.find((ref) => ref.headCommitSha === commitSha);
+  if (matchingHead) {
+    const normalizedName = normalizeBranchName(matchingHead.name);
+    return {
+      branchName: normalizedName,
+      commitSha,
+      baseBranchName: normalizedName
+    };
+  }
+
+  return {
+    branchName: commitSha.slice(0, 7),
+    commitSha
+  };
+}
+
+function normalizeBranchName(refName: string) {
+  return refName.startsWith("origin/") ? refName.slice("origin/".length) : refName;
+}
+
+async function resolveExistingRef(repoPath: string, candidates: Array<string | undefined | null>) {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const result = await execa("git", ["-C", repoPath, "rev-parse", "--verify", `${candidate}^{commit}`], {
+      reject: false
+    });
+    if (result.exitCode === 0) {
+      return candidate;
+    }
+  }
+  return null;
 }

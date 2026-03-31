@@ -18,7 +18,11 @@ export function parseVersionedBranchName(branchName: string) {
 }
 
 export function calculateNextWidth(parentCommitSha: string, branchRefs: BranchRefInfo[]) {
-  const siblingCount = branchRefs.filter((branchRef) => branchRef.parentCommitSha === parentCommitSha).length;
+  const siblingCount = new Set(
+    branchRefs
+      .filter((branchRef) => branchRef.parentCommitSha === parentCommitSha)
+      .map((branchRef) => normalizeBranchRefName(branchRef.name))
+  ).size;
   return siblingCount + 1;
 }
 
@@ -31,7 +35,12 @@ export function createChildBranchName(params: {
   const parsed = parseVersionedBranchName(params.parentBranchName);
   const root = parsed?.root ?? sanitizeBranchRoot(params.parentBranchName);
   const depth = parsed ? parsed.depth + 1 : 2;
-  const width = calculateNextWidth(params.parentCommitSha, params.branchRefs);
+  const existingBranchNames = new Set(params.branchRefs.map((branchRef) => normalizeBranchRefName(branchRef.name)));
+  let width = calculateNextWidth(params.parentCommitSha, params.branchRefs);
+
+  while (existingBranchNames.has(`${root}-v${depth}.${width}-${params.callsign}`)) {
+    width += 1;
+  }
 
   return `${root}-v${depth}.${width}-${params.callsign}`;
 }
@@ -40,3 +49,6 @@ export function isAutoSelectableBranch(branchName: string) {
   return !branchName.toLowerCase().includes("main");
 }
 
+function normalizeBranchRefName(refName: string) {
+  return refName.startsWith("origin/") ? refName.slice("origin/".length) : refName;
+}

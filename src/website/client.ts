@@ -1,6 +1,8 @@
 import type { CommitContext, SelectedParent, VersionSummary } from "../types.js";
 import { isAutoSelectableBranch } from "../guardrails/branching.js";
 
+export const MIN_PARENT_MATCHES = 3;
+
 type WebsiteClientOptions = {
   websiteBaseUrl: string;
   publicWebsiteBaseUrl: string;
@@ -37,13 +39,18 @@ function normalizeVersions(payload: unknown): VersionSummary[] {
 export class WebsiteClient {
   constructor(private readonly options: WebsiteClientOptions) {}
 
-  async getTopParentCandidate(): Promise<SelectedParent> {
+  async getParentCandidates(): Promise<SelectedParent[]> {
     const payload = await fetchJson(`${this.options.websiteBaseUrl}/api/versions`);
     const versions = normalizeVersions(payload)
       .filter((version) => {
         const branchName = version.branchName || version.primaryBranch || "";
         const labels = version.branchLabels || [];
-        return branchName && isAutoSelectableBranch(branchName) && !labels.some((label) => label.toLowerCase() === "main");
+        return (
+          branchName &&
+          (version.matches ?? 0) >= MIN_PARENT_MATCHES &&
+          isAutoSelectableBranch(branchName) &&
+          !labels.some((label) => label.toLowerCase() === "main")
+        );
       })
       .sort((left, right) => {
         const rightElo = right.currentElo ?? 0;
@@ -52,15 +59,23 @@ export class WebsiteClient {
         return rightElo - leftElo || matchDelta;
       });
 
-    const best = versions[0];
+    if (versions.length === 0) {
+      throw new Error(`No eligible parent branch found from website context. Parents need at least ${MIN_PARENT_MATCHES} matches.`);
+    }
+
+    return versions.map((version) => ({
+      branchName: version.branchName || version.primaryBranch || version.shortSha || version.commitSha,
+      commitSha: version.commitSha
+    }));
+  }
+
+  async getTopParentCandidate(): Promise<SelectedParent> {
+    const [best] = await this.getParentCandidates();
     if (!best?.commitSha) {
       throw new Error("No eligible parent branch found from website context.");
     }
 
-    return {
-      branchName: best.branchName || best.primaryBranch || best.shortSha || best.commitSha,
-      commitSha: best.commitSha
-    };
+    return best;
   }
 
   async getCommitContext(commitSha: string): Promise<CommitContext> {

@@ -30,5 +30,16 @@ describe("branch naming", () => {
       ])
     ).toBe(3);
   });
-});
 
+  it("skips an already-existing child branch name even if the branch has no child commit yet", () => {
+    const next = createChildBranchName({
+      parentBranchName: "fighting",
+      parentCommitSha: "parent-sha",
+      callsign: "c5",
+      branchRefs: [
+        { name: "fighting-v2.1-c5", headCommitSha: "parent-sha", parentCommitSha: "older-sha" }
+      ]
+    });
+    expect(next).toBe("fighting-v2.2-c5");
+  });
+});
