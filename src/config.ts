@@ -5,7 +5,8 @@ import { getPackageRoot } from "./internal/package-root.js";
 
 export const DEFAULT_LOCAL_REPO = "https://github.com/Centipede5/autogamestudio-games";
 export const DEFAULT_REMOTE_REPO = "https://github.com/Centipede5/autogamestudio-games";
-export const DEFAULT_WEBSITE_URL = "http://localhost:3000";
+export const LEGACY_LOCAL_WEBSITE_URL = "http://localhost:3000";
+export const DEFAULT_WEBSITE_URL = "https://autogamestudio.ai";
 export const DEFAULT_PUBLIC_WEBSITE_URL = "https://autogamestudio.ai";
 
 const PROVIDER_COMMAND_TEMPLATES: Record<ProviderName, string> = {
@@ -41,6 +42,16 @@ export async function loadRepoConfig(repoPath: string) {
     }
     throw error;
   }
+}
+
+export function resolveConfiguredWebsiteUrl(explicitUrl?: string, existingUrl?: string) {
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+  if (!existingUrl || existingUrl === LEGACY_LOCAL_WEBSITE_URL) {
+    return DEFAULT_WEBSITE_URL;
+  }
+  return existingUrl;
 }
 
 export async function saveRepoConfig(config: RepoConfig) {

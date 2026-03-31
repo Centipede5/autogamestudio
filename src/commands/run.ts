@@ -4,10 +4,10 @@ import { intro, outro } from "@clack/prompts";
 import {
   DEFAULT_LOCAL_REPO,
   DEFAULT_PUBLIC_WEBSITE_URL,
-  DEFAULT_WEBSITE_URL,
   ensureRepoRuntimeFiles,
   getProviderCommandTemplate,
   loadRepoConfig,
+  resolveConfiguredWebsiteUrl,
   saveRepoConfig
 } from "../config.js";
 import { createPullRequest } from "../github.js";
@@ -80,7 +80,7 @@ export async function runCommand(options: RunOptions) {
     fixedParentRef: setup.fixedParentRef,
     autoPr: setup.autoPr,
     dangerousPublicFeedback: setup.dangerousPublicFeedback,
-    websiteBaseUrl: options.websiteBaseUrl ?? existingConfig?.websiteBaseUrl ?? DEFAULT_WEBSITE_URL,
+    websiteBaseUrl: resolveConfiguredWebsiteUrl(options.websiteBaseUrl, existingConfig?.websiteBaseUrl),
     publicWebsiteBaseUrl: existingConfig?.publicWebsiteBaseUrl ?? DEFAULT_PUBLIC_WEBSITE_URL,
     validationCommands: existingConfig?.validationCommands ?? [],
     githubRepo: existingConfig?.githubRepo
@@ -238,9 +238,9 @@ async function runSingleIteration(config: RepoConfig, websiteClient: WebsiteClie
 
     const rescanned = await websiteClient.triggerRescan();
     if (rescanned) {
-      success("Triggered local website rescan.");
+      success("Triggered website rescan.");
     } else {
-      warn("Local website rescan was skipped or failed.");
+      warn("Website rescan was skipped or failed.");
     }
 
     if (config.autoPr) {

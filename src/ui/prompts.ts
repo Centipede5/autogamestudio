@@ -104,7 +104,7 @@ export async function promptForSetup(defaultRepo: string, defaults?: Partial<{
         }),
       dangerousPublicFeedback: () =>
         confirm({
-          message: "[DANGEROUS] Use feedback from the public autogamestudio website if local feedback is unavailable?",
+          message: "[DANGEROUS] Use the secondary public feedback source if the primary website context is unavailable?",
           initialValue: defaults?.dangerousPublicFeedback ?? false
         }),
       runMode: () =>

@@ -17,7 +17,7 @@ program
   .option("--callsign <callsign>", "operator callsign")
   .option("--auto-pr", "enable auto-PR")
   .option("--dangerous-public-feedback", "allow fallback to public site feedback")
-  .option("--website-base-url <url>", "local website base URL")
+  .option("--website-base-url <url>", "website base URL for context and rescan requests")
   .option("--once", "run exactly one iteration")
   .action(async (options) => {
     console.log(renderBanner());
